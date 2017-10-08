@@ -25,7 +25,7 @@ class DDPGAgent(Agent):
     def __init__(self, nb_actions, actor, critic, critic_action_input, memory,
                  gamma=.99, batch_size=32, nb_steps_warmup_critic=1000, nb_steps_warmup_actor=1000,
                  train_interval=1, memory_interval=1, delta_range=None, delta_clip=np.inf,
-                 random_process=None, custom_model_objects={}, target_model_update=.001, **kwargs):
+                 random_process=None, custom_model_objects={}, target_model_update=.001, invert_gradients=False, **kwargs):
         if hasattr(actor.output, '__len__') and len(actor.output) > 1:
             raise ValueError('Actor "{}" has more than one output. DDPG expects an actor that has a single output.'.format(actor))
         if hasattr(critic.output, '__len__') and len(critic.output) > 1:
@@ -63,6 +63,7 @@ class DDPGAgent(Agent):
         self.train_interval = train_interval
         self.memory_interval = memory_interval
         self.custom_model_objects = custom_model_objects
+        self.invert_gradients = invert_gradients
 
         # Related objects.
         self.actor = actor
@@ -152,6 +153,8 @@ class DDPGAgent(Agent):
             # minimize loss. Hence the double inversion.
             assert len(grads) == len(params)
             modified_grads = [-g for g in grads]
+            if self.invert_gradients:
+                modified_grads = [K.switch(g > 0, (1. - params[i] * g), params[i]) for i, g in enumerate(grads)]
             if clipnorm > 0.:
                 norm = K.sqrt(sum([K.sum(K.square(g)) for g in modified_grads]))
                 modified_grads = [optimizers.clip_norm(g, clipnorm, norm) for g in modified_grads]
@@ -160,7 +163,8 @@ class DDPGAgent(Agent):
             return modified_grads
         
         actor_optimizer.get_gradients = get_gradients
-        updates = actor_optimizer.get_updates(self.actor.trainable_weights, self.actor.constraints, None)
+        # self.actor.constraints = None
+        updates = actor_optimizer.get_updates(self.actor.trainable_weights, None, None)
         if self.target_model_update < 1.:
             # Include soft target model updates.
             updates += get_soft_target_model_updates(self.target_actor, self.actor, self.target_model_update)
