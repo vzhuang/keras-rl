@@ -157,7 +157,7 @@ class DDPGAgent(Agent):
             assert len(grads) == len(params)
             modified_grads = [-g for g in grads]
             if self.invert_gradients:
-                modified_grads = [K.switch(g > 0, (1. - params[i] * g), params[i]) for i, g in enumerate(grads)]
+                modified_grads = [K.switch(g > 0, (1. - params[i]) * g, params[i]) for i, g in enumerate(modified_grads)]
             if clipnorm > 0.:
                 norm = K.sqrt(sum([K.sum(K.square(g)) for g in modified_grads]))
                 modified_grads = [optimizers.clip_norm(g, clipnorm, norm) for g in modified_grads]
@@ -167,7 +167,7 @@ class DDPGAgent(Agent):
         
         actor_optimizer.get_gradients = get_gradients
         # self.actor.constraints = None
-        updates = actor_optimizer.get_updates(self.actor.trainable_weights, None, None)
+        updates = actor_optimizer.get_updates(self.actor.trainable_weights, self.actor.constraints, None)
         if self.target_model_update < 1.:
             # Include soft target model updates.
             updates += get_soft_target_model_updates(self.target_actor, self.actor, self.target_model_update)
